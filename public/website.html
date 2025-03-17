@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PUBG User Data</title>
+    <style>
+        body {
+            background-color: #1e1e1e;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 600px;
+            padding: 20px;
+            background-color: #2e2e2e;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+            overflow-y: auto;
+            max-height: 90vh;
+        }
+        h1 {
+            text-align: center;
+            color: #4caf50;
+            margin-bottom: 20px;
+        }
+        input[type="text"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #4caf50;
+            border-radius: 5px;
+            background-color: #3e3e3e;
+            color: #ffffff;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: #4caf50;
+            border: none;
+            border-radius: 5px;
+            color: #ffffff;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin-bottom: 20px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .profile, .season-stats, .match-stats {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #3e3e3e;
+            border-radius: 5px;
+        }
+        .profile p, .season-stats p, .match-stats p {
+            margin: 5px 0;
+        }
+        .match-stats {
+            border: 2px solid #4caf50;
+            padding: 10px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        .match-stats h3 {
+            margin-top: 0;
+            color: #4caf50;
+        }
+        .match-stats p {
+            margin: 8px 0;
+        }
+        .match-stats p strong {
+            color: #4caf50;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>PUBG User Data</h1>
+        <input type="text" id="player-name" placeholder="Enter player name">
+        <button onclick="searchPlayer()">Search</button>
+        <div id="player-data"></div>
+        <div id="seasonal-stats"></div>
+        <div id="match-data"></div>
+    </div>
+    <script>
+        const BASE_URL = 'http://localhost:3000/api';
+
+        async function getPubgUserData(playerName) {
+            console.log(`Fetching data for player: ${playerName}`);
+            try {
+                const response = await fetch(`${BASE_URL}/player/${playerName}`);
+                console.log(`Response status: ${response.status}`);
+                if (response.ok) {
+                    const playerData = await response.json();
+                    console.log('Player data:', playerData);
+                    displayPlayerData(playerData);
+
+                    const playerId = playerData.data[0].id;
+                    await getSeasonalStats(playerId);
+
+                    const matches = playerData.data[0].relationships.matches.data;
+                    for (const match of matches) {
+                        await getMatchData(match.id, playerId);
+                    }
+                } else {
+                    console.error(`Error: ${response.status} - ${response.statusText}`);
+                    document.getElementById('player-data').innerText = `Error: ${response.status} - ${response.statusText}`;
+                }
+            } catch (error) {
+                console.error(`Fetch error: ${error.message}`);
+                document.getElementById('player-data').innerText = `Fetch error: ${error.message}`;
+            }
+        }
+        function displayPlayerData(playerData) {
+            const playerDataDiv = document.getElementById('player-data');
+            if (playerData.data.length > 0) {
+                const player = playerData.data[0];
+                const playerId = player.id;
+                const banStatus = player.attributes.banType === "Innocent" ? 'Not Banned' : 'Banned';
+
+                playerDataDiv.innerHTML = `
+                    <div class="profile">
+                        <p><strong>Name:</strong> ${player.attributes.name}</p>
+                        <p><strong>Ban Status:</strong> ${banStatus}</p>
+                    </div>
+                `;
+            } else {
+                playerDataDiv.innerText = 'No player data found.';
+            }
+        }
+
+        async function getSeasonalStats(playerId) {
+    const seasonId = 'division.bro.official.pc-2018-33';
+    // Ensure the playerId includes "account."
+    if (!playerId.startsWith('account.')) {
+        playerId = `account.${playerId}`;
+    }
+    const url = `${BASE_URL}/shards/steam/players/${playerId}/seasons/${seasonId}?filter%5Bgamepad%5D=false`;
+    console.log(`Fetching seasonal stats from URL: ${url}`);
+    try {
+        const response = await fetch(url);
+        console.log(`Response status: ${response.status}`);
+        if (response.ok) {
+            const seasonalData = await response.json();
+            console.log('Seasonal stats:', seasonalData);
+            displaySeasonalStats(seasonalData);
+        } else {
+            console.error(`Error: ${response.status} - ${response.statusText}`);
+        }
+    } catch (error) {
+        console.error(`Fetch error: ${error.message}`);
+    }
+}
+
+
+
+        async function getMatchData(matchId, playerId) {
+    console.log(`Fetching match data for match ID: ${matchId}`);
+    try {
+        const response = await fetch(`${BASE_URL}/match/${matchId}`);
+        console.log(`Response status: ${response.status}`);
+        if (response.ok) {
+            const matchData = await response.json();
+            console.log('Match data:', matchData);
+
+            // Format the game mode and map name before displaying match data
+            matchData.data.attributes.gameMode = getFormattedGameMode(matchData.data.attributes.gameMode);
+            matchData.data.attributes.mapName = getFormattedMapName(matchData.data.attributes.mapName);
+
+            displayMatchData(matchData, playerId);
+        } else {
+            console.error(`Error: ${response.status} - ${response.statusText}`);
+        }
+    } catch (error) {
+        console.error(`Fetch error: ${error.message}`);
+    }
+}
+
+function getFormattedGameMode(gameMode) {
+    const gameModeMap = {
+        "duo-fpp": "DUO FPP",
+        "squad-fpp": "SQUAD FPP",
+        "solo-fpp": "SOLO FPP",
+        "duo": "DUO",
+        "squad": "SQUAD",
+        "solo": "SOLO"
+    };
+    return gameModeMap[gameMode] || gameMode;
+}
+
+function getFormattedMapName(mapName) {
+    const mapNameMap = {
+        "Baltic_Main": "Erangel",
+        "Chimera_Main": "Paramo",
+        "Desert_Main": "Miramar",
+        "DihorOtok_Main": "Vikendi",
+        "Erangel_Main": "Erangel",
+        "Heaven_Main": "Haven",
+        "Kiki_Main": "Deston",
+        "Range_Main": "Camp Jackal",
+        "Savage_Main": "Sanhok",
+        "Summerland_Main": "Karakin",
+        "Tiger_Main": "Taego",
+        "Neon_Main": "Rondo"
+    };
+    return mapNameMap[mapName] || mapName;
+}
+
+
+
+
+function displaySeasonalStats(seasonalData) {
+    const statsContainer = document.getElementById('seasonal-stats');
+    statsContainer.innerHTML = ''; // Clear previous stats
+    const gameModes = ['duo', 'duo-fpp', 'solo', 'solo-fpp', 'squad', 'squad-fpp'];
+
+    gameModes.forEach(mode => {
+        const stats = seasonalData.data.attributes.gameModeStats[mode];
+        if (stats) {
+            const modeStats = `
+                <div class="season-stats">
+                    <h2>Stats for ${mode}</h2>
+                    <p>Wins: ${stats.wins}</p>
+                    <p>Kills: ${stats.kills}</p>
+                    <p>Matches Played: ${stats.roundsPlayed}</p>
+                    <p>Top 10s: ${stats.top10s}</p>
+                    <p>Damage Dealt: ${stats.damageDealt}</p>
+                    <p>Longest Kill: ${stats.longestKill}</p>
+                    <!-- Add more stats as needed -->
+                </div>
+            `;
+            statsContainer.innerHTML += modeStats;
+        }
+    });
+}
+
+        function displayMatchData(matchData, playerId) {
+    const matchDataDiv = document.getElementById('match-data');
+    const match = matchData.data;
+    const playerStats = matchData.included.find(item => item.type === 'participant' && item.attributes.stats.playerId === playerId);
+    const roster = matchData.included.find(item => item.type === 'roster' && item.relationships.participants.data.some(participant => participant.id === playerStats.id));
+
+    if (playerStats) {
+        const timeSurvived = playerStats.attributes.stats.timeSurvived;
+        const minutes = Math.floor(timeSurvived / 60);
+        const seconds = timeSurvived % 60;
+
+        let matchStats = `
+            <div class="match-stats">
+                <h3>Match Stats:</h3>
+                <p><strong>Kills:</strong> ${playerStats.attributes.stats.kills}</p>
+                <p><strong>Damage Dealt:</strong> ${Math.round(playerStats.attributes.stats.damageDealt)}</p>
+                <p><strong>Time Survived:</strong> ${minutes}m ${seconds}s</p>
+                <p><strong>Match Type:</strong> ${match.attributes.gameMode}</p>
+                <p><strong>Map:</strong> ${match.attributes.mapName}</p>
+                <p><strong>Rank:</strong> ${playerStats.attributes.stats.winPlace}</p>
+            </div>
+        `;
+
+        // Check for teammates in the roster
+        if (roster) {
+            const teammates = roster.relationships.participants.data.filter(participant => participant.id !== playerStats.id);
+            if (teammates.length > 0) {
+                matchStats += `
+                    <div class="match-stats">
+                        <h3>Teammates:</h3>
+                `;
+                teammates.forEach(teammate => {
+                    const teammateStats = matchData.included.find(item => item.type === 'participant' && item.id === teammate.id);
+                    const teammateTimeSurvived = teammateStats.attributes.stats.timeSurvived;
+                    const teammateMinutes = Math.floor(teammateTimeSurvived / 60);
+                    const teammateSeconds = teammateTimeSurvived % 60;
+                    matchStats += `
+                        <p><strong>Player:</strong> ${teammateStats.attributes.stats.name}</p>
+                        <p><strong>Kills:</strong> ${teammateStats.attributes.stats.kills}</p>
+                        <p><strong>Damage Dealt:</strong> ${Math.round(teammateStats.attributes.stats.damageDealt)}</p>
+                        <p><strong>Time Survived:</strong> ${teammateMinutes}m ${teammateSeconds}s</p>
+                        <p><strong>Rank:</strong> ${teammateStats.attributes.stats.winPlace}</p>
+                    `;
+                });
+                matchStats += `
+                    </div>
+                `;
+            }
+        }
+
+        matchDataDiv.innerHTML += matchStats;
+    } else {
+        matchDataDiv.innerText = 'No match data found for this player.';
+    }
+}
+
+
+
+
+        function searchPlayer() {
+            const playerName = document.getElementById('player-name').value;
+            document.getElementById('player-data').innerHTML = '';
+            document.getElementById('seasonal-stats').innerHTML = '';
+            document.getElementById('match-data').innerHTML = '';
+            getPubgUserData(playerName);
+        }
+    </script>
+</body>
+</html>
